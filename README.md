@@ -1,4 +1,4 @@
-# Gateway de autenticação e consumo de API — TCC 2
+# ln-gateway — Gateway de autenticação e tarifação de APIs via Lightning Network
 
 Protótipo experimental desenvolvido para o Trabalho de Conclusão de Curso 2 (Engenharia de Software — UTFPR Dois Vizinhos), voltado ao estudo de autenticação por chave pública e tarifação de APIs com créditos denominados em satoshis (Lightning Network). O projeto tem finalidade estritamente acadêmica, investigando consistência transacional e idempotência em arquiteturas de microsserviços. A proposta integral está registrada em `docs/TCC1-original.tex` e permanece inalterada.
 

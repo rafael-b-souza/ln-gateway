@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tcc-ln-gateway"
+name = "ln-gateway"
 version = "0.1.0"
 description = "Protótipo acadêmico isolado de gateway com cobrança pré-paga"
 requires-python = ">=3.10"
