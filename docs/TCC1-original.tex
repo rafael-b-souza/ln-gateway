@@ -1,0 +1,390 @@
+\documentclass[openright]{normas-utf-tex}
+\usepackage[breaklinks=true]{hyperref}
+\usepackage[a-3b]{pdfx}
+\usepackage[alf,abnt-emphasize=bf,bibjustif,recuo=0cm, abnt-etal-cite=3, abnt-etal-list=99]{abntcite} 
+\usepackage[brazil]{babel} % pacote portugues brasileiro
+\usepackage[utf8]{inputenc} % pacote para acentuacao direta
+\usepackage[T1]{fontenc} 
+\usepackage{amsmath,amsfonts,amssymb} % pacote matematico
+\usepackage{graphicx} % pacote grafico
+\usepackage{float}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{quoting}
+\usepackage[none]{hyphenat}
+\usepackage{microtype}
+\usepackage[final]{pdfpages}
+\usepackage{tikz}
+\usetikzlibrary{positioning}
+
+
+\makeatletter
+\setlength{\@fptop}{0pt}
+\makeatother
+
+\instituicao{Universidade Tecnológica Federal do Paraná} % nome da instituicao
+\programa{Coordenadoria do Curso de Engenharia de Software} % nome do curso
+\area{} % Em branco
+
+\documento{Projeto de TCC 1} 
+\nivel{Bacharelado}
+\titulacao{Bacharel}
+
+\titulo{\MakeUppercase{Gateway de Autenticação, Custódia e Consumo de API}} % titulo do trabalho em portugues
+\title{API Gateway for Authentication, Custody, and Usage-Based Billing} % titulo do trabalho em ingles
+
+\autor{Rafael Bernardy de Souza} % autor do trabalho
+\cita{BERNARDY DE SOUZA, Rafael} 
+
+\palavraschave{API Gateway, LNbits, Lightning Network, Cobrança por Uso, LNURL} % palavras-chave do trabalho
+\keywords{API Gateway, LNbits, Lightning Network, Usage-Based Billing, LNURL} % palavras-chave do trabalho em ingles
+
+\comentario{\UTFPRdocumentodata apresentado como requisito parcial para obtenção do título de \UTFPRtitulacaodata\ em Engenharia de Software da \ABNTinstituicaodata\ (UTFPR).}
+
+\orientador{Newton Carlos Will} 
+\coorientador{Erinaldo da Silva Pereira} 
+\local{Dois Vizinhos} % cidade
+\data{\the\year} % ano automatico
+
+%Definir a licença do curso com as seguintes opções (deixar em branco quando não houver):
+%by
+%by-nc
+%by-nc-nd
+%by-nc-sa
+%by-nd
+%by-sa
+\licenca{by}
+
+\begin{document}
+
+\capa 
+\folhaderosto 
+
+\sumario 
+
+
+%resumo
+\begin{resumo}
+    Este projeto de pesquisa propõe o desenvolvimento de um \textbf{gateway de autenticação, custódia e cobrança para APIs} que utiliza a \emph{Lightning Network} por meio da plataforma \textit{LNbits}. O problema central é a ausência, no contexto brasileiro, de soluções open\-source que ofereçam monetização granular — por token, byte ou requisição — com liquidação instantânea e taxas reduzidas. Objetiva\-se conceber uma arquitetura que integre \textbf{métodos de autenticação baseados em chaves públicas}, gestão segura de créditos em satoshis e mecanismo automático de débito conforme o consumo do cliente. A metodologia compreende: (i) revisão bibliográfica sobre API Gateways e modelos \textit{pay\-per\-use}; (ii) design de software empregando \textit{FastAPI}, PostgreSQL/TimescaleDB e microserviços em contêineres Docker; (iii) integração com LNbits via REST e LNURL\-Pay; (iv) experimentos de validação com métricas de latência, vazão e custo por requisição. Espera\-se entregar um protótipo funcional, acompanhado de documentação em LaTeX (normas UTFPR), capaz de demonstrar viabilidade técnica e econômica para provedores de serviços que desejem adotar pagamentos Lightning em APIs.
+\end{resumo}
+
+\begin{abstract}
+    This research project proposes the development of an \textbf{authentication, custody, and billing gateway for APIs} that leverages the \emph{Lightning Network} through the \textit{LNbits} platform. The core problem addressed is the absence, in the Brazilian context, of open-source solutions that provide granular monetization --- per token, byte, or request --- with instant settlement and reduced fees. The project aims to design an architecture that integrates \textbf{authentication methods based on public keys}, secure management of credits in satoshis, and an automatic debiting mechanism according to client consumption. The methodology comprises: (i) a literature review on API gateways and \textit{pay-per-use} models; (ii) software design using \textit{FastAPI}, PostgreSQL/TimescaleDB, and microservices in Docker containers; (iii) integration with LNbits via REST and LNURL-Pay; and (iv) validation experiments with latency, throughput, and cost-per-request metrics. The expected outcome is a functional prototype, accompanied by documentation written in LaTeX following UTFPR guidelines, capable of demonstrating technical and economic feasibility for service providers wishing to adopt Lightning payments in APIs.
+\end{abstract}
+
+\noindent\textbf{Keywords}: API Gateway, LNbits, Lightning Network, Usage-Based Billing, LNURL.
+
+\chapter{INTRODUÇÃO}
+O crescimento exponencial de serviços digitais baseados em \textit{Application Programming Interfaces} (APIs) demanda mecanismos de autenticação, cobrança e escalabilidade cada vez mais eficientes. Modelos tradicionais de monetização \textit{pay-as-you-go}—fundados em cartões de crédito ou assinaturas mensais—apresentam limitações como taxas elevadas, prazos de liquidação longos e barreiras para micropagamentos \cite{rozik2022apieconomy,trefke2020usagebased}. Paralelamente, o avanço da \textbf{Lightning Network} (LN) consolidou-se, na literatura recente, como uma solução promissora para transações em satoshis de baixo custo e liquidação quase instantânea, fomentando novos modelos de negócio de microtransações \cite{poon2016lightning,rodriguez2024survey,vargas2019lightning}.
+
+No entanto, na revisão de literatura realizada (Capítulos~2 e~3), \textbf{não foram identificados gateways open-source que integrem autenticação robusta e cobrança granular com LNbits}—plataforma que abstrai a complexidade de operação da LN—permitindo tarifação por token, byte ou requisição em APIs de forma transparente tanto para provedores quanto para consumidores. Sem tal ferramenta, empresas que desejam adotar micropagamentos via LN enfrentam a necessidade de desenvolver soluções proprietárias ou recorrer a serviços centralizados estrangeiros, onerando custos de implantação, operação e compliance.
+
+O presente projeto propõe a investigação e o desenvolvimento de um \textbf{Gateway de Autenticação, Custódia e Consumo de API} baseado em LNbits, focado na realidade de provedores brasileiros de software e serviços de Inteligência Artificial. A hipótese central deste trabalho é que a adoção da Lightning Network, alinhada a uma arquitetura modular em \textit{FastAPI} com controle de uso e débitos automáticos, \textbf{pode reduzir de forma significativa o custo operacional e de transação em relação a modelos de gateway convencionais baseados em cartões ou chaves de API estáticas}. De forma mais específica, \textbf{estima-se, como hipótese a ser testada empiricamente no TCC~2, que essa redução possa atingir ordem de grandeza de cerca de 60\% no cenário experimental definido}, sem que haja, até o momento, comprovação empírica dessa estimativa.
+
+Este documento encontra-se organizado da seguinte forma: o Capítulo 2 descreve a fundamentação teórica; o Capítulo 3 discute a revisão do estado da arte; o Capítulo 4 detalha a metodologia de pesquisa e desenvolvimento, incluindo o cronograma de execução; o Capítulo 5 apresenta os resultados esperados; e o Capítulo 6 traz as considerações finais, seguidas das referências consultadas.
+
+\section{Objetivos}
+
+\subsection{Objetivo Geral}
+Desenvolver um \textbf{gateway open-source} que integre autenticação baseada em chaves públicas, custódia de créditos em satoshis via LNbits e cobrança granular (por token, byte ou requisição) para APIs, validando desempenho e viabilidade econômica no contexto brasileiro.
+
+\subsection{Objetivos Específicos}
+\begin{itemize}
+\item Realizar revisão bibliográfica sobre Lightning Network, LNbits, modelos de cobrança \textit{pay-per-use} e gateways de API.
+\item Definir requisitos funcionais e não funcionais do sistema, incluindo métricas de latência, throughput e segurança.
+\item Projetar a arquitetura do gateway utilizando \textit{FastAPI}, PostgreSQL/TimescaleDB e contêineres Docker.
+\item Implementar integração completa com LNbits (REST APIs, WebSocket, LNURL-Pay) para autenticação e custódia.
+\item Desenvolver middleware de contagem de tokens/bytes/requisições e mecanismo automático de débito em satoshis.
+\item Elaborar conjunto de testes de carga e casos de uso comparativos com gateways tradicionais baseados em cartão.
+\item Avaliar desempenho, custo e escalabilidade, documentando resultados quantitativos.
+\item Produzir documentação técnica e tutorial de implantação, seguindo o template LaTeX normas-utf-tex.
+\item Disponibilizar código-fonte em repositório GitHub sob licença permissiva (MIT ou similar).
+\end{itemize}
+
+\section{Justificativa e Relevância}
+A proposta deste gateway é respaldada por três pilares de relevância: acadêmica, tecnológica e socioeconômica. No âmbito \textbf{acadêmico}, o projeto contribui para a pesquisa em arquiteturas de microserviços e monetização \textit{pay-per-use} baseadas em criptomoedas, tema ainda pouco explorado na literatura nacional. A integração da Lightning Network via LNbits oferece um estudo de caso real sobre escalabilidade e segurança de micropagamentos, permitindo validar modelos teóricos com experimentação prática.
+
+Do ponto de vista \textbf{tecnológico}, a solução open-source proposta \textbf{busca suprir a escassez de ferramentas brasileiras} capazes de proporcionar autenticação forte e cobrança granular em APIs sem dependência de terceiros centralizados, conforme mapeado na revisão de literatura deste trabalho. Ao disponibilizar código sob licença permissiva, o projeto fomenta a adoção de padrões abertos, reduz o \textit{vendor lock-in} e facilita a integração com plataformas de Inteligência Artificial, IoT e serviços em nuvem que necessitam de tarifação precisa por uso.
+
+
+Sob a ótica \textbf{socioeconômica}, o gateway democratiza o acesso a modelos de monetização avançados para \textit{startups}, pesquisadores e pequenas empresas, permitindo que recebam micropagamentos em satoshis com liquidação instantânea e taxas ínfimas. Isso potencializa novas fontes de receita, estimula a inovação local e contribui para a inclusão financeira, ao mesmo tempo em que reduz barreiras de entrada impostas por sistemas tradicionais de pagamento.
+
+Assim, a execução deste projeto atende às demandas de pesquisa aplicada da UTFPR e oferece benefícios tangíveis à comunidade de desenvolvedores e ao ecossistema de serviços digitais no Brasil.
+
+\chapter{FUNDAMENTAÇÃO TEÓRICA}
+
+Esta seção apresenta os principais conceitos que sustentam a solução proposta.
+
+\section{Lightning Network}
+A Lightning Network (LN) é uma camada de micropagamentos fora da cadeia sobre o protocolo Bitcoin. Ela utiliza canais de pagamento bidirecionais que permitem a troca de compromissos assinados entre as partes, reduzindo latência e custo por transação. Somente a abertura e o fechamento de canais são registrados on-chain, proporcionando escalabilidade a taxas próximas de zero \cite{poon2016lightning}.
+
+\section{LNbits}
+O LNbits atua como um \textit{wallet manager} multiusuário que abstrai a operação de um nó LN. Ele expõe endpoints REST/WebSocket para criar carteiras virtuais, emitir faturas (BOLT11) e gerar links LNURL-Pay. Cada carteira possui duas chaves: \textit{invoice\_key} (somente recebimento) e \textit{admin\_key} (controle total), possibilitando delegar privilégios de forma granular.
+
+\section{Autenticação Criptográfica}
+
+A autenticação criptográfica fundamenta-se no uso de \textbf{chaves públicas} e \textbf{assinaturas digitais}, permitindo que um cliente prove a posse de um segredo (chave privada) sem revelá-lo. Em termos gerais, cada entidade possui um par de chaves $(sk, pk)$ gerado sobre uma curva elíptica (no contexto do Bitcoin e da Lightning Network, a curva secp256k1) e utiliza a chave privada $sk$ para assinar mensagens, enquanto a chave pública $pk$ é distribuída aos verificadores \cite{stallings2017cryptography}. A segurança desse modelo repousa na dificuldade computacional do problema do logaritmo discreto em curvas elípticas.
+
+Entre os esquemas de assinatura disponíveis, as \textbf{assinaturas Schnorr} ganharam destaque no ecossistema Bitcoin por apresentarem prova de segurança mais simples, suporte eficiente a agregação de assinaturas e propriedades favoráveis para construção de protocolos avançados, como \textit{multisig} e assinaturas adaptadoras \cite{maxwell2018schnorr}. O padrão BIP-340 formaliza o uso de Schnorr sobre a curva secp256k1, permitindo que a mesma infraestrutura de chaves utilizada em transações Bitcoin e canais Lightning seja reaproveitada para autenticação em camadas superiores \cite{bip340}.
+
+No gateway proposto, cada cliente é associado a uma \textbf{chave pública} derivada de sua carteira Lightning/LNbits. Em vez de depender de \textit{API keys} estáticas (segredos opacos salvos em arquivos de configuração ou variáveis de ambiente), a autenticação ocorre por meio de um protocolo de \textit{challenge--response}. O fluxo básico pode ser descrito da seguinte forma:
+
+\begin{enumerate}
+    \item \textbf{Registro}: o cliente informa ao gateway sua chave pública, que é vinculada à carteira virtual correspondente no LNbits e a uma política de créditos em satoshis.
+    \item \textbf{Desafio}: ao receber uma requisição não autenticada, o gateway gera um nonce aleatório e constrói uma mensagem de desafio incluindo, por exemplo, método HTTP, caminho do endpoint, carimbo de tempo e \textit{hash} do corpo da requisição.
+    \item \textbf{Assinatura}: o cliente assina o desafio com sua chave privada Schnorr e devolve a assinatura juntamente com a chave pública (ou um identificador associado).
+    \item \textbf{Verificação}: o gateway verifica criptograficamente a assinatura com a chave pública registrada. Em caso de sucesso, a requisição é considerada autenticada e segue para as etapas de autorização e cobrança.
+\end{enumerate}
+
+Esse modelo possui diferenças importantes em relação a mecanismos tradicionais, como \textbf{\textit{API keys}} e \textbf{JSON Web Tokens (JWT)}. As \textit{API keys} são, em essência, \textit{tokens bearer}: qualquer ator que obtiver o valor da chave pode reutilizá-la até que seja revogada, tornando-as particularmente vulneráveis a vazamentos em código-fonte, registros de log ou ferramentas de observabilidade \cite{owasp2021api}. Os JWT, por sua vez, encapsulam \textit{claims} assinadas pelo servidor (ou por um provedor de identidade), mas ainda funcionam como portadores: a posse do token é suficiente para realizar chamadas até o seu vencimento \cite{jones2015jwt}.
+
+Na abordagem com assinaturas Schnorr, o segredo nunca deixa o domínio do cliente: apenas desafios específicos são assinados, e cada requisição pode ser vinculada a um nonce único e a um intervalo de tempo limitado. Isso mitiga ataques de \textit{replay}, nos quais um atacante tenta reutilizar uma mensagem legítima capturada na rede, e reduz o impacto de comprometimentos pontuais de canais de comunicação, uma vez que a chave privada não transita entre as partes. Além disso, como a identidade do cliente está ancorada em chaves já utilizadas na infraestrutura Lightning, há redução de complexidade operacional, reaproveitando o mesmo conjunto de credenciais para pagamentos e autenticação.
+
+A integração com o LNbits torna-se natural nesse contexto. A plataforma já gerencia carteiras e chaves para cada usuário, expondo apenas chaves de administração e emissão de faturas (\textit{admin\_key} e \textit{invoice\_key}) em sua API \cite{lnbitsdocs}. No gateway proposto, em vez de expor ou reutilizar diretamente essas chaves como \textit{tokens bearer}, a chave pública associada à carteira é usada para autenticação criptográfica, enquanto o saldo e os débitos em satoshis são consultados e atualizados por meio das rotas REST do LNbits. Essa separação de papéis contribui para reduzir a superfície de ataque e facilita a revogação ou rotação de chaves em caso de comprometimento.
+
+Por fim, ao combinar autenticação baseada em chaves públicas com medições detalhadas de uso (seção seguinte), é possível aproximar-se de modelos de \textit{Payment-Required} em APIs, nos quais o acesso a determinado recurso é condicionado ao pagamento prévio ou em tempo real, explorando conceitos inspirados em \textit{Lightning Service Authentication Tokens} (LSAT) e em \textit{paywalls} criptográficos para serviços web.
+
+\section{Modelos de Cobrança Granular}
+
+Modelos de cobrança \textit{pay-per-use} buscam alinhar o custo pago pelo cliente ao consumo efetivo de recursos da API, em contraste com planos puramente fixos ou assinaturas com grandes franquias. Na literatura sobre economia de APIs, são discutidos múltiplos esquemas de tarifação, como \textit{freemium}, \textit{tiers} mensais, cobrança por chamadas e precificação dinâmica baseada em uso \cite{rozik2022apieconomy}. No contexto de serviços de computação em nuvem e de APIs de Inteligência Artificial, três modelos de cobrança granular destacam-se: por token, por byte e por requisição.
+
+\begin{itemize}
+    \item \textbf{Por token}: nesse modelo, o preço é proporcional ao número de tokens processados por uma API, geralmente associado a serviços de IA generativa ou processamento de linguagem natural. Provedores de modelos de linguagem de grande porte tipicamente precificam o uso em unidades de mil tokens, cobrando de forma diferenciada para tokens de entrada e de saída. Em termos práticos, isso permite que um cliente pague menos por chamadas curtas (por exemplo, perguntas simples) e mais por requisições complexas que demandam contexto extenso ou respostas longas. A principal \textbf{vantagem} é a granularidade fina de cobrança, alinhada ao esforço computacional do provedor; a \textbf{limitação} é a necessidade de instrumentos de medição de tokens e de transparência para o usuário final, que muitas vezes não tem intuição clara sobre o que constitui um ``token''. Em um gateway integrado ao LNbits, a quantidade de tokens consumidos por requisição pode ser convertida em satoshis com base em uma tabela de preços configurável, debitando-se o saldo do cliente após cada chamada ou após um lote de chamadas.
+    
+    \item \textbf{Por byte}: a cobrança por byte (ou por volume de dados) é mais comum em serviços de armazenamento, \textit{streaming} ou transferência de arquivos, mas também pode ser aplicada a APIs que manipulam grandes cargas binárias, como imagens, vídeos ou séries temporais \cite{trefke2020usagebased}. Nesse modelo, o preço é determinado pelo total de bytes (ou megabytes/gigabytes) transferidos em um intervalo de tempo. Sua \textbf{vantagem} é a proporcionalidade direta ao tráfego de rede e ao custo de banda; a \textbf{desvantagem} é a sensibilidade a flutuações de consumo, o que pode dificultar a previsibilidade de gastos para o cliente. No gateway proposto, um middleware registra o volume de bytes de requisição e resposta associados a cada chamada, acumulando esse valor em uma tabela de consumo. Periodicamente, um processo de liquidação gera débitos no LNbits via rota \texttt{/payments}, convertendo o total de bytes em satoshis de acordo com a política comercial definida.
+    
+    \item \textbf{Por requisição}: a cobrança por requisição é talvez o modelo de \textit{pay-per-use} mais difundido em APIs REST tradicionais. Cada chamada bem-sucedida ao endpoint tem um custo fixo (por exemplo, X satoshis por requisição), independentemente do tamanho da carga de dados. Esse modelo é simples de compreender e de implementar, além de facilitar a previsão de custos em cenários onde o padrão de uso (número de chamadas mensais) é relativamente estável. Sua \textbf{principal vantagem} é a simplicidade; em contrapartida, pode ser menos justo em casos extremos, como requisições que exigem muito processamento ou retornam grandes quantidades de dados. No gateway proposto, um contador de requisições por chave pública ou carteira LNbits é suficiente para calcular o valor devido, disparando o pagamento a cada chamada ou ao atingir um determinado limiar (por exemplo, a cada 100 ou 1\,000 requisições).
+\end{itemize}
+
+Na prática, provedores de API frequentemente combinam esses modelos, adotando, por exemplo, uma assinatura básica que dá direito a uma franquia de requisições ou tokens, seguida de cobrança incremental por uso excedente. Em um cenário de micropagamentos com Lightning Network, é possível explorar esquemas mais flexíveis, como:
+
+\begin{itemize}
+    \item cobrança \textbf{pré-paga}, na qual o cliente realiza um depósito inicial em satoshis no LNbits e passa a consumir seus créditos de forma granular, seja por token, byte ou requisição;
+    \item aplicação do código HTTP 402 (\textit{Payment Required}) quando o saldo é insuficiente, instruindo o cliente a efetuar um novo pagamento Lightning para continuar utilizando a API;
+    \item descontos progressivos com base em volume de uso acumulado (por exemplo, redução do valor unitário após determinado número de tokens ou requisições).
+\end{itemize}
+
+No gateway aqui proposto, contadores implementados em \textit{middleware} são responsáveis por medir o consumo em cada dimensão (tokens, bytes e requisições) e armazená-lo com carimbo de tempo em um banco orientado a séries temporais (TimescaleDB). Um componente de faturamento consulta periodicamente essas métricas e envia instruções de pagamento ao LNbits por meio da rota \texttt{/payments}, debitando o saldo da carteira do cliente em satoshis. Essa separação entre medição de uso e liquidação financeira facilita a evolução independente das políticas de precificação, permitindo que novos modelos (por exemplo, \textit{pay-per-second} de processamento) sejam introduzidos sem alterações profundas na camada de custódia Lightning.
+
+\section{Padrões de API Gateway}
+Segundo \citeonline{nginx2019microservices}, gateways devem concentrar autenticação, roteamento, limitação de taxa e observabilidade. A arquitetura proposta utiliza \textit{FastAPI} (ASGI) em contêiner Docker, permitindo escalabilidade horizontal.
+
+\chapter{REVISÃO DO ESTADO DA ARTE}
+
+A presente revisão de literatura tem como objetivo contextualizar a Lightning Network e o LNbits no cenário de micropagamentos, discutir modelos de monetização de APIs e gateways orientados a cobrança por uso e, por fim, explicitar as lacunas que motivam o desenvolvimento do gateway proposto.
+
+\section{Lightning Network: evolução e pesquisas recentes}
+
+A \textbf{Lightning Network} (LN) foi inicialmente proposta por \citeonline{poon2016lightning} como uma solução de segunda camada sobre o Bitcoin, baseada em canais de pagamento fora da cadeia (\textit{off-chain}). Nessa arquitetura, a maior parte das transações ocorre por meio da troca de compromissos assinados entre as partes, sendo apenas a abertura e o fechamento dos canais registradas na \textit{blockchain} principal. Esse modelo reduz drasticamente a latência e o custo por transação, viabilizando pagamentos de baixo valor em escala.
+
+Do ponto de vista de implementação, não existe uma “implementação de referência” única para a Lightning Network, mas um conjunto de nós interoperáveis, compatíveis com as especificações BOLT (\textit{Basis of Lightning Technology}) \cite{masteringln}. Entre as principais implementações estão: \textbf{Core Lightning (CLN)}, mantida pela Blockstream e conhecida por ser leve, modular e altamente customizável por meio de \textit{plugins}, o que a torna atrativa para operadores de infraestrutura que desejam estender o nó com lógicas específicas de negócio \cite{clndocs,clnplugins}; a \textbf{Lightning Network Daemon (LND)}, desenvolvida pela Lightning Labs, escrita em Go e amplamente adotada em serviços de produção por expor APIs gRPC e REST maduras para integração com aplicações externas \cite{lnddocs,lndoverview}; e o \textbf{Eclair}, implementação em Scala mantida pela ACINQ, utilizada tanto em servidores quanto em carteiras móveis, com uma API HTTP pensada para facilitar a integração com serviços web e aplicações de custódia \cite{eclairdocs,eclairwallet}. Trabalhos de síntese sobre o ecossistema destacam que essas implementações, embora distintas em linguagem e foco, são interoperáveis e seguem o mesmo conjunto de especificações BOLT \cite{lnimploverview}.
+
+Em termos de pesquisa acadêmica e técnica, levantamentos recentes organizam a literatura sobre LN em eixos temáticos como: (i) \textbf{topologia e roteamento}, analisando o grafo de canais, propriedades de \textit{small-world} e estratégias de roteamento eficiente de pagamentos; (ii) \textbf{segurança}, com estudos sobre ataques de \textit{channel jamming}, \textit{time-dilation} e penalidades por fechamento incorreto de canais; (iii) \textbf{liquidez e modelos econômicos}, investigando alocação ótima de fundos, precificação de \textit{routing fees} e incentivos econômicos para operadores de nó; e (iv) \textbf{aplicações em serviços web e Internet das Coisas (IoT)}, que exploram micropagamentos recorrentes para acesso a APIs, \textit{streaming} de dados e sensores conectados \cite{rodriguez2024survey,lnsecurity}. Esses estudos apontam que a LN deixou de ser apenas um experimento teórico e se consolidou como infraestrutura viável para micropagamentos em diferentes domínios.
+
+No contexto brasileiro, \citeonline{vargas2019lightning} analisam a Lightning Network como alternativa para micropagamentos, destacando seu potencial para reduzir custos em comparação a meios tradicionais, ao mesmo tempo em que apontam desafios de usabilidade, regulação e maturidade das ferramentas disponíveis. Quando se considera a existência de múltiplas implementações (CLN, LND, Eclair), essa discussão torna-se ainda mais relevante: provedores de serviço podem escolher a pilha tecnológica mais adequada ao seu cenário (por exemplo, CLN em servidores Linux minimalistas ou LND em ambientes fortemente orientados a gRPC), mantendo compatibilidade com a rede global.
+
+Por fim, a arquitetura proposta neste trabalho se apoia especificamente em um nó \textbf{Core Lightning (CLN)} como camada de liquidação, mas permanece conceitualmente compatível com as demais implementações. O uso de uma plataforma intermediária de custódia, como o LNbits, desacopla o gateway de detalhes específicos do nó Lightning, permitindo que, em trabalhos futuros, o protótipo seja adaptado para operar sobre LND ou Eclair sem alterações profundas nas camadas de autenticação, medição de uso e cobrança.
+
+\section{Plataforma LNbits e aplicações de micropagamento}
+
+Dentro do ecossistema Lightning, o \textbf{LNbits} surgiu como uma plataforma \textit{multi-tenant} que abstrai a operação direta de um nó LN, oferecendo uma camada de \textit{wallet management} e uma API REST voltada a desenvolvedores. A documentação oficial descreve o LNbits como um ``gerenciador de carteiras Lightning'' capaz de criar subcarteiras virtuais, emitir faturas BOLT11, gerar links LNURL-Pay e integrar extensões que implementam diferentes modelos de negócio, como doações, \textit{paywalls} e vendas unitárias de conteúdo \cite{lnbitsdocs}.
+
+Trabalhos recentes e materiais técnicos apontam o LNbits como um catalisador de inovações em micropagamentos, justamente por permitir que aplicações web se beneficiem da Lightning Network sem exigir que cada desenvolvedor opere e mantenha diretamente um nó de pagamento \cite{rodriguez2024survey}. Em cenários como jogos online, plataformas de conteúdo e serviços de \textit{tipping}, o LNbits tem sido utilizado para orquestrar pagamentos por uso, gerenciar saldos de múltiplos usuários e até dividir automaticamente receitas entre diferentes participantes do sistema.
+
+Além da API básica de emissão e recebimento de pagamentos, extensões específicas do LNbits viabilizam \textit{paywalls} e mecanismos de \textit{pay-per-use}, nos quais o acesso a determinado recurso (página, arquivo, funcionalidade) é liberado após a confirmação de um pagamento Lightning \cite{lnbitsdocs}. Isso demonstra que há um terreno fértil para a integração entre o LNbits e gateways de API, permitindo que o conceito de ``conteúdo pago'' se estenda para ``\textit{endpoints} pagos'' em arquiteturas de microserviços.
+
+\section{Monetização de APIs e Gateways orientados a pagamento por uso}
+
+No âmbito da \textbf{economia de APIs}, diversos modelos de monetização são relatados na literatura e na prática industrial, incluindo acesso gratuito, \textit{freemium}, assinaturas mensais, planos em camadas (\textit{tiers}) e cobrança estritamente por uso (\textit{pay-per-use}). Estudos sobre plataformas de API destacam que a precificação baseada em uso tende a alinhar melhor o custo ao valor percebido pelo cliente e a reduzir barreiras de entrada, especialmente para desenvolvedores e pequenas empresas, que podem começar com baixo consumo e expandir gradualmente \cite{rozik2022apieconomy}. Em serviços de computação em nuvem e de Inteligência Artificial, é comum a combinação de uma camada gratuita ou de baixo custo com cobrança variável por requisição, volume de dados ou número de tokens processados \cite{trefke2020usagebased}.
+
+Do ponto de vista de implementação, muitos provedores de API adotam \textbf{tiers} mensais com franquias de uso (por exemplo, N mil requisições ou tokens incluídos) e cobranças adicionais por excedente. Essa abordagem simplifica o faturamento e se integra facilmente a meios de pagamento tradicionais, como cartões de crédito ou faturas mensais, mas apresenta limitações importantes quando se deseja monetização verdadeiramente granular: taxas mínimas por transação, prazos de liquidação e risco de estornos (\textit{chargeback}) dificultam a tarifação de chamadas individuais em valores muito baixos. Na prática, isso empurra desenvolvedores para modelos de consumo mais “grossos”, mesmo quando a natureza do serviço (por exemplo, consultas eventuais a uma API de inferência) se beneficiaria de micropagamentos por chamada ou por kilobyte transferido.
+
+\textbf{API Gateways} como \textit{Kong}, \textit{NGINX APISIX} e \textit{Amazon API Gateway} são amplamente utilizados para gerenciamento de tráfego, autenticação (OAuth~2.0/JWT), limitação de taxa e observabilidade. Segundo \citeonline{nginx2019microservices}, cabe ao gateway concentrar funcionalidades transversais, como autenticação, controle de acesso, \textit{rate limiting} e coleta de métricas, simplificando o desenvolvimento dos serviços de backend. Contudo, esses produtos normalmente integram-se a sistemas de faturamento tradicionais, e não a mecanismos de micropagamento nativos; assim, a monetização por uso é frequentemente implementada em camadas externas (por exemplo, sistemas de cobrança que leem logs de uso e geram faturas mensais) e não como parte do caminho crítico de cada requisição.
+
+Nos últimos anos, surgiram propostas específicas para integrar micropagamentos Lightning diretamente ao fluxo de autenticação e autorização de APIs. Uma linha de trabalho importante é a dos \textbf{Lightning Service Authentication Tokens} (LSAT), proposta pela Lightning Labs, que combina pagamentos via Lightning Network com o pouco utilizado código HTTP~402 (\textit{Payment Required}) \cite{lsat,llsat_tierion}. A ideia central é que, ao receber uma requisição não autorizada, o serviço responda com HTTP~402, incluindo simultaneamente (i) uma fatura Lightning (invoice BOLT11) e (ii) um \textit{macaroon} parcialmente restrito. Após o pagamento da fatura, o cliente obtém um token LSAT completo, que passa a funcionar tanto como prova de pagamento quanto como credencial de autenticação para chamadas subsequentes à API.
+
+A evolução desse conceito é o protocolo \textbf{L402} (antigo LSAT), que padroniza o uso combinado de Lightning, \textit{macaroons} e HTTP~402 para cobrança de serviços distribuídos \cite{l402spec,l402docs}. Implementações como o \textit{Aperture}, mantido pela Lightning Labs, atuam como um \textit{reverse proxy} HTTP que intercepta requisições, emite respostas 402 com faturas Lightning, valida pagamentos e, somente então, encaminha chamadas autenticadas ao serviço de backend. Nessa arquitetura, o pagamento em satoshis é um pré-requisito para obtenção de um “\textit{API key} Lightning”, aproximando-se de um modelo \textit{pay-per-request} integrado ao ciclo de autenticação.
+
+Essas propostas também contribuem para a revalorização do código HTTP~402, historicamente reservado na especificação HTTP e raramente utilizado em produção. Estudos e artigos técnicos recentes descrevem o 402 como um candidato natural a código de status para \textbf{\textit{paywalls}} de API e monetização fina de recursos digitais, especialmente quando combinado com uma “moeda nativa da internet” capaz de suportar micropagamentos, como a Lightning Network \cite{http402study,http402lsat}. A combinação de 402 com LSAT/L402 tem sido explorada em protótipos de distribuição de conteúdo sem anúncios, APIs pagas sob demanda e serviços de dados que cobram pequenos valores por requisição \cite{lsatproxy}.
+
+Especificamente em relação ao problema deste TCC, esses modelos de monetização se conectam em três pontos centrais:
+
+\begin{enumerate}
+    \item \textbf{Cobrança granular}: tanto LSAT/L402 quanto a solução proposta buscam cobrar o uso da API em unidades pequenas (por requisição ou por grupo de requisições), reduzindo a necessidade de planos mensais rígidos. No entanto, enquanto LSAT/L402 concentram-se em associar pagamento e autenticação em um único token, o gateway aqui proposto explicita múltiplas dimensões de uso (tokens, bytes e requisições), armazenando essas métricas em um banco de dados de séries temporais para posterior análise e faturamento.
+    \item \textbf{Integração com Lightning Network}: nos trabalhos sobre LSAT/L402, o nó Lightning geralmente é operado diretamente pelo provedor do serviço, e o foco está na emissão de \textit{invoices} e validação de pagamentos \cite{lsat,l402spec}. No presente projeto, essa responsabilidade é delegada ao \textbf{LNbits}, que atua como camada de custódia multiusuário, simplificando a gestão de carteiras, saldos e pagamentos em satoshis. O gateway interage com o LNbits via REST, o que reduz a complexidade para desenvolvedores brasileiros que não desejam operar um nó Lightning completo.
+    \item \textbf{Contexto brasileiro e acessibilidade}: embora LSAT e L402 ofereçam um caminho conceitual para APIs pagas por uso, suas implementações de referência e documentação são predominantemente voltadas ao público internacional e a casos de uso específicos (por exemplo, serviços Loop e Pool da Lightning Labs) \cite{l402docs}. Não foram identificadas soluções open-source, com documentação em português, que integrem de forma clara autenticação, custódia via LNbits e medição detalhada de consumo de API orientada ao contexto brasileiro. O gateway proposto procura preencher justamente essa lacuna, servindo como estudo de caso e base de código reutilizável para provedores locais de serviços de IA e APIs em geral.
+\end{enumerate}
+
+Dessa forma, a revisão de literatura sobre monetização de APIs e modelos \textit{pay-per-use} indica que há um corpo crescente de trabalhos e protótipos que combinam Lightning Network, HTTP~402 e tokens de autenticação como LSAT/L402. Entretanto, ainda falta uma solução voltada especificamente a cenários de \textbf{cobrança por token, byte ou requisição}, com foco em desenvolvedores brasileiros e apoiada em ferramentas como o LNbits, o que motiva o desenvolvimento do gateway descrito neste TCC.
+
+\section{Micropagamentos e \textit{pay-per-use} no contexto brasileiro}
+
+No cenário brasileiro, a discussão sobre micropagamentos digitais costuma gravitar em torno de instrumentos como \textbf{Pix}, carteiras digitais e plataformas de pagamento móvel. Apesar de o Pix ter se consolidado como meio de pagamento instantâneo de amplo uso, seu desenho atual está mais alinhado a transferências entre pessoas e pagamentos de valor unitário, não a fluxos automatizados de cobrança por chamada de API ou por byte transferido.
+
+\citeonline{vargas2019lightning} argumentam que a Lightning Network possui características particularmente adequadas a micropagamentos recorrentes em serviços digitais, por combinar liquidação rápida, taxas reduzidas e possibilidade de automação. Contudo, o estudo também aponta obstáculos à adoção da LN no Brasil, incluindo a falta de ferramentas localizadas, percepções de complexidade técnica e incertezas regulatórias relacionadas ao uso de criptomoedas.
+
+Do ponto de vista de provedores de API nacionais, observa-se que a maioria das soluções de monetização ainda se baseia em modelos de assinatura fixa ou \textit{tiers} mensais, muitas vezes cobrados via cartão de crédito ou boletos emitidos por intermediários. A ausência de infraestruturas prontas para \textit{pay-per-use} em escala de satoshis contribui para que ideias de cobrança granular permaneçam em grande parte restritas ao discurso, sem se materializar em produtos acessíveis a pequenas empresas, \textit{startups} e pesquisadores.
+
+Ferramentas como LNbits, quando combinadas a gateways de API, podem mitigar parte dessas barreiras, pois permitem que a lógica de custódia e recebimento de pagamentos Lightning seja delegada a uma plataforma especializada. Ainda assim, não se identificam, na literatura e em repositórios de código abertos, soluções desenhadas especificamente para o mercado brasileiro que combinem LNbits, autenticação criptográfica e medição detalhada de consumo de API.
+
+\section{Síntese e lacunas identificadas}
+
+A partir dos trabalhos e soluções analisados, é possível sintetizar o estado da arte em três eixos principais:
+
+\begin{enumerate}
+    \item \textbf{Lightning Network como infraestrutura de micropagamentos}: a LN está consolidada como tecnologia viável para pagamentos de baixo valor, com várias pesquisas voltadas a desempenho, segurança e aplicações em serviços digitais \cite{poon2016lightning, rodriguez2024survey}. Estudos brasileiros ressaltam seu potencial, mas também as dificuldades de adoção no contexto nacional \cite{vargas2019lightning}.
+    \item \textbf{LNbits como camada de custódia e integração}: o LNbits simplifica o uso da LN por meio de APIs e extensões, sendo amplamente citado como ferramenta que facilita a criação de aplicações que utilizam micropagamentos \cite{lnbitsdocs}. No entanto, seu uso costuma se concentrar em cenários como doações, jogos e \textit{paywalls} de conteúdo, não havendo foco específico em gateways de API.
+    \item \textbf{API Gateways e monetização por uso}: gateways consolidados oferecem autenticação, roteamento e observabilidade \cite{nginx2019microservices}, enquanto modelos de monetização \textit{pay-per-use} são teoricamente reconhecidos como adequados a serviços de API, mas, na prática, continuam fortemente acoplados a meios de pagamento tradicionais, que não suportam micropagamentos de forma eficiente.
+\end{enumerate}
+
+À luz desse panorama, emergem as seguintes lacunas, que o presente trabalho busca endereçar:
+
+\begin{enumerate}
+    \item Não foram identificadas soluções \textbf{open-source}, com foco no contexto brasileiro, que combinem em um único gateway: autenticação baseada em chaves públicas associadas a carteiras LNbits, custódia de créditos em satoshis e cobrança granular por token, byte ou requisição em APIs.
+    \item Há escassez de estudos empíricos que comparem, de maneira quantitativa, o \textit{total cost of ownership} de um gateway apoiado em Lightning Network com o de soluções tradicionais baseadas em cartões ou faturamento mensal, especialmente em cenários de alto volume de chamadas de API.
+    \item A literatura nacional carece de documentação didática, em português, que oriente desenvolvedores na adoção de modelos \textit{pay-per-use} com LN e LNbits, desde a concepção arquitetural até a implantação e monitoramento em produção.
+\end{enumerate}
+
+Dessa forma, o projeto aqui proposto se posiciona na interseção entre esses três eixos, buscando projetar, implementar e avaliar um \textbf{gateway de autenticação, custódia e consumo de API} que una Lightning Network, LNbits e práticas modernas de engenharia de APIs, preenchendo uma lacuna prática e acadêmica identificada na revisão da literatura.
+
+\chapter{METODOLOGIA}
+
+O percurso metodológico foi estruturado em etapas sequenciais, alinhadas às boas práticas de engenharia de software experimental.
+
+\section{Tipo de Pesquisa}
+Classifica-se como \textbf{pesquisa aplicada} com abordagem quantitativa, pois visa construir e avaliar um artefato tecnológico (gateway) em condições controladas, mensurando métricas de desempenho e custo.
+
+\section{Etapas de Desenvolvimento}
+\begin{enumerate}
+    \item \textbf{Levantamento Bibliográfico}: revisão de literatura em Lightning Network, LNbits e modelos de cobrança \textit{pay-per-use}. 
+    \item \textbf{Especificação de Requisitos}: definição de casos de uso, requisitos funcionais e não funcionais (por exemplo, latência p95 < 200 ms e custo médio < 50 sat/req).
+    \item \textbf{Design de Arquitetura}: modelagem de componentes em \textit{FastAPI} (ASGI), banco TimescaleDB e microserviços Docker. 
+    \item \textbf{Implementação Incremental}: ciclo \textit{build--measure--learn} com versionamento Git e integração contínua (GitHub Actions). 
+    \item \textbf{Testes Unitários e de Integração}: uso de PyTest e Coverage, com \textbf{meta inicial de alcançar} >90\% de cobertura.
+    \item \textbf{Ensaios de Desempenho}: aplicação do \textit{Locust} para gerar carga de 100, 500 e 1,000 req/s, monitorando latência, throughput e utilização de recursos. 
+    \item \textbf{Análise de Custos}: comparação do custo por requisição (satoshis) com modelo Stripe (USD) e API Gateway AWS, convertendo valores a uma média de BTC/USD do dia. 
+    \item \textbf{Documentação e Release}: criação de manual de implantação em LaTeX e publicação do código sob licença MIT.
+\end{enumerate}
+
+\section{Arquitetura Proposta}
+
+A arquitetura do gateway será organizada em camadas, separando de forma explícita os componentes de borda HTTP, o núcleo de autenticação e cobrança, os adaptadores de integração com o LNbits e os serviços consumidores de API.
+
+A Figura~\ref{fig:arquitetura-gateway} apresenta uma visão de alto nível dessa arquitetura, destacando:
+
+\begin{figure}[h]
+    \centering
+    \resizebox{0.9\textwidth}{!}{%
+    \begin{tikzpicture}[
+        node distance=1.8cm and 2.5cm,
+        box/.style={draw, rounded corners, align=center, minimum width=3.3cm, minimum height=1.2cm},
+        >=Stealth
+    ]
+        % Nós principais
+        \node[box] (client) {Cliente\\(app web / serviço de terceiros)};
+        \node[box, right=of client] (gateway) {Gateway de API\\(autenticação \\ e cobrança por uso)};
+        \node[box, right=of gateway] (backend) {Serviços de backend\\(APIs protegidas)};
+        
+        % LNbits e nó Lightning
+        \node[box, below=of gateway] (lnbits) {LNbits\\+ nó Lightning (CLN)};
+        
+        % Observabilidade
+        \node[box, below=of backend] (obs) {Observabilidade\\(logs, métricas, dashboards)};
+        
+        % Setas de fluxo
+        \draw[->] (client) -- node[above]{HTTP} (gateway);
+        \draw[->] (gateway) -- node[above]{HTTP} (backend);
+        
+        \draw[<->] (gateway) -- node[right]{REST / WebSocket} (lnbits);
+        
+        \draw[->] (gateway) |- node[pos=0.25, left]{logs\\métricas} (obs);
+        \draw[->] (backend) -- node[right]{métricas} (obs);
+    \end{tikzpicture}%
+    }
+    \caption{Arquitetura de alto nível do gateway de autenticação, custódia e consumo de API baseado em LNbits.}
+    \label{fig:arquitetura-gateway}
+\end{figure}
+
+
+\begin{itemize}
+    \item o cliente (por exemplo, uma aplicação web ou serviço de terceiros) que envia requisições autenticadas;
+    \item o gateway de API, responsável por validar credenciais, verificar saldo, aplicar a política de cobrança por uso e encaminhar as requisições;
+    \item o LNbits como provedor de custódia e faturamento, registrando pagamentos via Lightning Network;
+    \item os serviços de backend protegidos pelo gateway;
+    \item a camada de observabilidade (logs, métricas e \textit{dashboards}) responsável por expor informações de desempenho e custo.
+\end{itemize}
+
+\section{Ferramentas e Tecnologias}
+\begin{itemize}
+    \item \textbf{Linguagem}: Python~3.12 será utilizada como linguagem principal de implementação do gateway, pela sua sintaxe expressiva, tipagem opcional e amplo ecossistema de bibliotecas voltadas a serviços web, integração com bancos de dados e instrumentação. Além disso, a maturidade da linguagem em cenários de automação e APIs facilita a escrita de protótipos rápidos e a criação de \textit{scripts} auxiliares para testes e implantação. Optou-se por Python em vez de alternativas como Node.js ou Go porque o foco recai sobre rapidez de desenvolvimento, abundância de bibliotecas relacionadas à Lightning Network e métricas, bem como experiência prévia do autor com o ecossistema.
+
+    \item \textbf{Framework Web}: FastAPI, executando sobre o servidor ASGI Uvicorn, será o framework responsável por expor os endpoints HTTP do gateway, definir rotas, middlewares de autenticação e medição de uso, bem como realizar a serialização e validação de dados de entrada e saída. O suporte nativo a programação assíncrona permite lidar com chamadas concorrentes à API do LNbits e aos serviços de backend com menor sobrecarga de I/O, contribuindo para o cumprimento das metas de latência estabelecidas na especificação de requisitos. A escolha por FastAPI em detrimento de frameworks mais pesados (como Django) ou síncronos (como o Flask tradicional) se justifica pela combinação de desempenho, documentação voltada a APIs modernas e geração automática de documentação OpenAPI.
+
+    \item \textbf{Banco de Dados}: PostgreSQL~16 será o banco de dados relacional principal, responsável por armazenar entidades de domínio, como clientes, chaves públicas, políticas de cobrança e saldos consolidados. Sobre ele, a extensão TimescaleDB~2.x será utilizada para modelar séries temporais de métricas de uso (tokens, bytes e requisições por unidade de tempo), permitindo consultas agregadas por janelas temporais e estratégias de \textit{retention} e \textit{downsampling} de dados antigos. Essa combinação foi escolhida em vez de bancos puramente NoSQL ou TSDB dedicados (como InfluxDB) por oferecer consistência transacional, linguagem SQL padrão e um bom equilíbrio entre flexibilidade de esquemas relacionais e desempenho para séries temporais.
+
+    \item \textbf{Pagamentos}: o LNbits atuará como camada de custódia de créditos em satoshis, emissão de faturas Lightning e execução de pagamentos por meio de sua API REST, abstraindo a complexidade de operar diretamente um nó Lightning. O backend Lightning será fornecido por um nó Core Lightning (CLN) 24.x, permitindo que o gateway liquide micropagamentos de forma segura e programável, mantendo os canais de pagamento e a liquidez sob controle. Optou-se por LNbits sobre CLN, em vez de integrar diretamente com outras implementações (como LND ou Eclair), devido à arquitetura multiusuário, ao ecossistema de extensões e à separação clara entre carteiras virtuais e operação do nó base, o que simplifica a integração com o gateway.
+
+    \item \textbf{Containerização}: todos os componentes do sistema (gateway FastAPI, PostgreSQL/TimescaleDB, LNbits, Prometheus e Grafana) serão empacotados em contêineres Docker, garantindo reprodutibilidade do ambiente de desenvolvimento, teste e demonstração. O Docker Compose será empregado para orquestrar a pilha em uma única máquina, definindo dependências, volumes e variáveis de ambiente, enquanto o Docker Swarm poderá ser utilizado para simular cenários de escalabilidade horizontal e distribuição de carga entre múltiplas instâncias do gateway. A adoção de Docker, em vez de máquinas virtuais ou instalação manual, reduz o \textit{overhead} operacional e facilita que outros desenvolvedores implantem o protótipo em seus próprios ambientes.
+
+    \item \textbf{Observabilidade}: o Prometheus será responsável por coletar periodicamente métricas expostas pelo gateway, como latência por endpoint, taxa de erros, consumo de tokens/bytes por cliente e uso de recursos (CPU, memória). O Grafana será utilizado para construir \textit{dashboards} que permitam visualizar essas métricas em tempo real e comparar o comportamento do gateway Lightning com soluções de baseline, incluindo painéis específicos para custo médio em satoshis por requisição. A combinação Prometheus+Grafana foi escolhida por ser amplamente consolidada na indústria, integrar-se bem a aplicações Python/FastAPI e permitir que os painéis sejam reutilizados ou compartilhados em outros contextos.
+
+    \item \textbf{Testes de Carga}: o Locust~2.23 será empregado como ferramenta de testes de carga, simulando usuários virtuais que realizam chamadas autenticadas à API sob diferentes padrões de uso (picos, carga constante, cenários de abuso). Os \textit{scripts} de usuários definirão perfis de consumo por token, byte e requisição, permitindo avaliar o impacto de cada modelo de cobrança nas métricas de latência, throughput e estabilidade do gateway. A escolha por Locust, em vez de ferramentas como JMeter ou k6, se deve à possibilidade de definir cenários complexos diretamente em Python, reaproveitando parte da lógica e das estruturas já utilizadas nos testes automatizados do projeto.
+
+    \item \textbf{CI/CD}: o GitHub Actions será utilizado como plataforma de integração e entrega contínua, configurando \textit{workflows} que executam \textit{lint}, testes automatizados e \textit{build} das imagens Docker a cada \textit{push} ou abertura de \textit{pull request}. Adicionalmente, serão definidos estágios para publicação de imagens em um registro de contêiner e implantação em ambientes de teste, garantindo que mudanças na lógica de autenticação, cobrança ou integração com o LNbits passem por verificação automática antes de chegar ao ambiente principal. Essa escolha se justifica pela integração nativa com o repositório GitHub do projeto e pela eliminação da necessidade de manutenção de um servidor próprio de CI, reduzindo a barreira para contribuições externas.
+\end{itemize}
+
+\section{Procedimentos de Validação}
+As métricas coletadas incluem: (i) latência p95; (ii) throughput (req/s); (iii) custo médio em satoshis por requisição; (iv) uso de CPU e memória. Resultados serão analisados com \textit{Pandas} e \textit{SciPy}, aplicando testes \textit{t-student} para verificar diferença estatística entre o gateway proposto e um baseline convencional.
+
+\section{Cronograma}
+
+O cronograma abrange 18 semanas (equivalente a um semestre letivo de TCC~2), alinhando cada atividade às metas e entregas previstas, desde o levantamento bibliográfico até a redação e revisão final do trabalho.
+
+\begin{table}[H]
+    \centering
+    \caption{Cronograma previsto para execução do TCC~2 (semanas do semestre).}
+    \label{tab:cronograma-tcc1}
+    \renewcommand{\arraystretch}{1.2}
+    \scriptsize
+    \begin{tabularx}{\textwidth}{l*{18}{c}}
+        \toprule
+        Atividade & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 & 9 & 10 & 11 & 12 & 13 & 14 & 15 & 16 & 17 & 18 \\
+        \midrule
+        Levantamento bibliográfico        & X & X &   &   &   &   &   &   &   &   &   &   &   &   &   &   &   &   \\
+        Especificação de requisitos       &   &   & X & X &   &   &   &   &   &   &   &   &   &   &   &   &   &   \\
+        Design de arquitetura             &   &   &   & X & X & X &   &   &   &   &   &   &   &   &   &   &   &   \\
+        Implementação incremental         &   &   &   &   & X & X & X & X & X &   &   &   &   &   &   &   &   &   \\
+        Testes unitários/integrados       &   &   &   &   &   & X & X & X & X &   &   &   &   &   &   &   &   &   \\
+        Ensaios de desempenho             &   &   &   &   &   &   &   &   & X & X &   &   &   &   &   &   &   &   \\
+        Análise de custos                 &   &   &   &   &   &   &   &   &   & X & X &   &   &   &   &   &   &   \\
+        Redação e documentação            &   &   &   &   &   &   &   &   &   &   & X & X & X & X &   &   &   &   \\
+        Revisões finais e submissão       &   &   &   &   &   &   &   &   &   &   &   &   &   & X & X & X & X &   \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+\chapter{RESULTADOS ESPERADOS}
+
+Espera-se, ao término do TCC~1, alcançar os seguintes resultados:
+
+\begin{itemize}
+    \item \textbf{Protótipo funcional}: um gateway operando com integração ao LNbits, capaz de autenticar clientes, registrar consumo de API e efetuar cobrança por uso via Lightning Network.
+    \item \textbf{Métricas de desempenho e custo}: conjunto de experimentos documentados com latência p95, throughput (requisições/segundo) e custo por requisição, permitindo comparar o gateway proposto com modelos tradicionais baseados em chaves de API e cartões.
+    \item \textbf{Relatórios e dashboards}: \textit{dashboards} e relatórios gerados a partir das métricas coletadas (por exemplo, utilizando Prometheus e Grafana), com foco em desempenho, disponibilidade e viabilidade econômica no contexto brasileiro.
+    \item \textbf{Documentação técnica e acadêmica}: documentação de arquitetura, decisões de projeto e guia de uso do gateway, além deste projeto de TCC em LaTeX, servindo como base para o desenvolvimento do TCC~2.
+    \item \textbf{Repositório público}: código-fonte disponibilizado em repositório GitHub sob licença permissiva (por exemplo, MIT), contendo instruções de instalação, execução local com contêineres e exemplos de integração para consumidores de API.
+\end{itemize}
+
+\chapter{CONSIDERAÇÕES FINAIS}
+
+O presente projeto de TCC~1 delineou o problema, os objetivos e a proposta de um gateway de autenticação, custódia e cobrança por uso baseado em LNbits, voltado a cenários de consumo de API com micropagamentos em Lightning Network.
+
+Foram apresentados o contexto e a relevância do tema, o referencial teórico sobre Lightning Network, LNbits e gateways de API, bem como a metodologia a ser adotada, o cronograma de execução e os resultados esperados. Em especial, destaca-se a intenção de avaliar, de forma quantitativa, o desempenho e a viabilidade econômica da solução proposta frente a alternativas tradicionais.
+
+Como limitações deste projeto, ressalta-se que a implementação completa, a realização integral dos experimentos e a análise detalhada dos resultados ocorrerão principalmente no âmbito do TCC~2. Assim, o presente documento concentra-se no planejamento estruturado, nas definições de arquitetura e na preparação do ambiente de avaliação.
+
+Como trabalhos futuros imediatos, prevê-se: (i) a implementação incremental do protótipo descrito; (ii) a execução dos testes de desempenho e custo previstos; (iii) o refinamento da arquitetura com base nos resultados obtidos; e (iv) a elaboração do relatório final de TCC~2, consolidando contribuições técnicas e científicas sobre o uso de LNbits como camada de custódia e faturamento para APIs.
+
+\bibliography{reflatex}
+
+\end{document}

@@ -1,0 +1,11 @@
+*.db
+*.db-*
+*.demo-key
+*.pub
+__pycache__/
+.pytest_cache/
+*.egg-info/
+.venv/
+.env
+.postgres-data/
+.postgres-run/

@@ -1,0 +1,19 @@
+# Produto — estágio de engenharia, não TCC2 concluído
+
+## Evidência executada
+
+O cluster PostgreSQL dedicado em `127.0.0.1:55432` foi usado em testes com `TCC_TEST_DATABASE_URL` e credencial local em `.postgres-run/pgpass` (não exibida). Em 21/10/2026, `PYTHONPATH=src python3 -m pytest -q` com essas variáveis executou **57 passed** após controles executáveis somente com fixture (`EMISSAO-CONTROLES-EXECUTAVEIS.md`); `PYTHONPATH=src python3 -m ln_gateway.demo_flow` demonstra assinatura → invoice fake → crédito uma vez → débito → recibo sem rede Lightning. Não são medições de p95, custo ou vazão. A proposta TCC1 foi mantida intacta.
+
+## LNbits
+
+A tag v1.6.2 foi inspecionada pelo código-fonte (`LNBITS-CONTRATO.md`) e validada por fixtures HTTP de mesmo formato; **em sessão posterior** o sandbox LNbits real foi verificado em leitura sem invoices/fundos no LXC 121 (`LNBITS-SANDBOX-EVIDENCIA.md`), e a leitura Alby de dois GETs autorizados foi comprovada em sessão anterior (`ALBY-LEITURA-LAB.md`), mas esta preparação de emissão continua exclusivamente offline (`EMISSAO-SEGURA-PLANO.md`). No LXC de desenvolvimento 120 não há runtime nem autorização de namespace; esse bloqueio histórico está em `SANDBOX-BLOQUEIO.md`. No **LXC 121**, uma instância `VoidWallet` isolada foi iniciada e depois encerrada; criou-se uma carteira local vazia apenas para consultas seguras. O `FakeWallet` emite BOLT11 `bc` e não foi usado. Nenhuma invoice foi emitida. A API pública permanece fake. `LNbitsInvoices` rejeita envelope `paid` sem `details` da carteira autenticada e msat positivo integral, mas BOLT11 não tem validação criptográfica independente; por isso **não é caminho habilitado para fundos**. O valor de emissão em msat e estado foram testados somente em mocks.
+
+## Tentativa de emissão incerta
+
+Migração SQL v4 adiciona `invoice_attempts` com estados `issuing`, `uncertain`, `recorded`; `IssuanceService` (isolado da API) confirma reserva no banco **antes** de qualquer chamada ao port, recusa segunda emissão para ID/conta sob disputa ou timeout, e guarda referência após resposta verificável. Falhas/timeout geram estado bloqueado, inclusive após novo objeto de sessão; recuperação de referência conhecida requer teste de valor/carteira e atualmente aceita **somente FakeInvoices**. `quarantine_stale` bloqueia também reservas `issuing` abandonadas por crash, sem POST adicional. Não faz busca remota automática por `external_id` nem repete POST desconhecido. Se servidor falhar entre emissão remota e persistência da referência, a invoice fica órfã e requer investigação manual: fail-closed é disponibilidade menor, não idempotência externa garantida. Testes SQLite e PG cobrem disputa, timeout e reinício sem duplicação do fake. **Não ativar emissão remota** enquanto faltar deduplicação comprovada e BOLT11 validado.
+
+## Itens restantes e bloqueios acadêmicos
+
+Bytes de resposta, tokens e precificação variável dependem de backend confiável, métrica de uso assinada/atribuível e reserva/teto prévio com política de estorno. Sem isso, implementá-los como contagem arbitrária geraria cobrança errada; permanecem fora da API. LNURL-Pay/WebSocket requerem evento autenticado e confirmação REST persistente; TimescaleDB exige extensão no cluster separado e política de séries temporais; nada disso foi apresentado como pronto. Docker, CLN, métricas, Locust, baseline econômico e relatório UTFPR ainda pendentes. A hipótese de redução de ~60% não foi testada.
+
+**Urgente para Newton/Erinaldo/Marlon:** validar orientação e escopo reduzido do protótipo, assinatura BIP-340 versus Ed25519, necessidade de LNbits/CLN reais ou sandbox e critérios de comparação, forma/canal da entrega informada para **09/11/2026**. Não houve contato nem submissão. Para fundos, parar e obter nova autorização específica com ambiente, invoice, valor e teto de perdas após cumprir `CHECKLIST-LNBITS.md`.

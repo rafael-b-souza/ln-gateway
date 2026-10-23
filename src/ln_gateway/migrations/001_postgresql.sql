@@ -1,0 +1,3 @@
+CREATE TABLE accounts (id VARCHAR(64) PRIMARY KEY, public_key VARCHAR(64) NOT NULL UNIQUE, balance INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0));
+CREATE TABLE challenges (nonce VARCHAR(64) PRIMARY KEY, account_id VARCHAR(64) NOT NULL REFERENCES accounts(id), request_id VARCHAR(64) NOT NULL, body_hash VARCHAR(64) NOT NULL, path VARCHAR(160) NOT NULL, expires_at TIMESTAMPTZ NOT NULL, used INTEGER NOT NULL DEFAULT 0 CHECK (used IN (0, 1)));
+CREATE TABLE debits (account_id VARCHAR(64) NOT NULL REFERENCES accounts(id), request_id VARCHAR(64) NOT NULL, body_hash VARCHAR(64) NOT NULL, amount INTEGER NOT NULL CHECK (amount > 0), balance_after INTEGER NOT NULL CHECK (balance_after >= 0), created_at TIMESTAMPTZ NOT NULL, PRIMARY KEY (account_id, request_id));

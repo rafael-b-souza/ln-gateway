@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tcc-ln-gateway"
+version = "0.1.0"
+description = "Protótipo acadêmico isolado de gateway com cobrança pré-paga"
+requires-python = ">=3.10"
+dependencies = ["fastapi>=0.110,<1", "uvicorn>=0.27,<1", "sqlalchemy>=2,<3", "cryptography>=41,<47", "httpx>=0.27,<1", "psycopg[binary]>=3,<4", "bolt11==2.1.1", "bitstring==4.3.1", "tiktoken==0.14.0"]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"ln_gateway.migrations" = ["*.sql"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
