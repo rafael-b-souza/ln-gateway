@@ -6,8 +6,10 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-from fastapi import FastAPI, HTTPException
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import httpx
 from sqlalchemy import select, update
@@ -16,6 +18,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from .lnbits import FakeInvoices, InvoiceStatus
 from .storage import Account, Challenge, Debit, Deposit, Credit, UsageEvent, make_sessions
 from .billing import quote
+from .l402 import L402Manager, L402TokenData
 
 ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 HEX = re.compile(r"^[0-9a-f]{64}$")
@@ -55,6 +58,32 @@ class ConsumeInput(BaseModel):
     payload: str = Field(max_length=4096)
 
 
+class SettleInput(BaseModel):
+    """Parâmetros para liquidação em bancada/demonstração."""
+
+    payment_hash: str = Field(max_length=64)
+
+
+class L402TokenInput(BaseModel):
+    """Parâmetros para validação de pré-imagem e emissão de token L402."""
+
+    account_id: str = Field(max_length=64)
+    payment_hash: str = Field(max_length=64)
+    preimage: str = Field(max_length=64)
+    request_id: str = Field(max_length=64)
+    nonce: str = Field(max_length=64)
+    signature: str = Field(max_length=128)
+
+
+class AIInferInput(BaseModel):
+    """Parâmetros para requisição de inferência protegida por L402."""
+
+    prompt: str = Field(default="Hello AI Agent", max_length=4096)
+    model: str = Field(default="l402-deepseek-r1-demo", max_length=64)
+    account_id: str | None = Field(default=None, max_length=64)
+    public_key: str | None = Field(default=None, max_length=64)
+
+
 def canonical(challenge: Challenge) -> bytes:
     """Bytes canônicos para assinatura do desafio."""
     expiry = challenge.expires_at.replace(tzinfo=timezone.utc) if challenge.expires_at.tzinfo is None else challenge.expires_at
@@ -64,19 +93,26 @@ def canonical(challenge: Challenge) -> bytes:
 
 
 def create_app(database_url: str = "sqlite:///./gateway.db", price_sat: int = 1,
-               invoices=None, billing_mode: str = "request") -> FastAPI:
+               invoices=None, billing_mode: str = "request",
+               l402_manager: L402Manager | None = None) -> FastAPI:
     """Cria a aplicação FastAPI do gateway."""
     if type(price_sat) is not int or not 1 <= price_sat <= 1_000_000:
         raise ValueError("price_sat deve ser inteiro positivo até 1 milhão")
     if billing_mode not in ("request", "bytes", "tokens"):
         raise ValueError("billing_mode inválido")
     sessions = make_sessions(database_url)
-    app = FastAPI(title="TCC2 Gateway — protótipo de demonstração")
+    app = FastAPI(
+        title="ln-gateway — L402 Payment Required Gateway",
+        description="L402 / HTTP 402 Payment Required Gateway for Autonomous AI Agents and Metered APIs via Lightning Network",
+        version="0.2.0"
+    )
     app.state.sessions = sessions
     invoice_port = invoices if invoices is not None else FakeInvoices()
     if not isinstance(invoice_port, FakeInvoices):
         raise ValueError("Fluxo HTTP de emissão somente aceita fake; integração real requer outbox")
     app.state.invoices = invoice_port
+    l402_mgr = l402_manager if l402_manager is not None else L402Manager()
+    app.state.l402_manager = l402_mgr
 
     @app.get("/health")
     def health():
@@ -86,7 +122,8 @@ def create_app(database_url: str = "sqlite:///./gateway.db", price_sat: int = 1,
     @app.post("/v1/challenges", status_code=201)
     def issue(data: ChallengeInput):
         """Emite desafio efêmero (60s) vinculado à operação solicitada."""
-        allowed = ("/v1/consume", "/v1/receipt", "/v1/deposits", "/v1/deposits/reconcile", "/v1/deposits/status")
+        allowed = ("/v1/consume", "/v1/receipt", "/v1/deposits", "/v1/deposits/reconcile",
+                   "/v1/deposits/status", "/v1/l402/token", "/v1/ai/infer")
         if (not ID.fullmatch(data.account_id) or not ID.fullmatch(data.request_id)
                 or not HEX.fullmatch(data.body_hash) or data.path not in allowed
                 or (data.path in ("/v1/receipt", "/v1/deposits/reconcile", "/v1/deposits/status")
@@ -299,5 +336,165 @@ def create_app(database_url: str = "sqlite:///./gateway.db", price_sat: int = 1,
             return result
         except OperationalError as exc:
             raise HTTPException(503, "banco indisponível") from exc
+
+    @app.post("/v1/l402/settle")
+    def l402_settle(data: SettleInput):
+        """Liquida fatura em memória para demonstração ou testes locais."""
+        if not HEX.fullmatch(data.payment_hash):
+            raise HTTPException(422, "payment_hash inválido")
+        if not isinstance(invoice_port, FakeInvoices):
+            raise HTTPException(501, "Liquidação manual suportada apenas com FakeInvoices")
+        try:
+            preimage = invoice_port.settle_invoice(data.payment_hash)
+            return {"paid": True, "payment_hash": data.payment_hash, "preimage": preimage}
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.post("/v1/l402/token")
+    def l402_token(data: L402TokenInput):
+        """Valida pré-imagem Lightning e assinatura Ed25519, emitindo token L402 idempotente."""
+        if not HEX.fullmatch(data.preimage) or not HEX.fullmatch(data.payment_hash):
+            raise HTTPException(422, "preimage ou payment_hash inválidos")
+        
+        computed_hash = hashlib.sha256(bytes.fromhex(data.preimage)).hexdigest()
+        if computed_hash != data.payment_hash:
+            raise HTTPException(400, "Preimage não confere com o payment_hash da fatura")
+
+        body_hash = hashlib.sha256(data.payment_hash.encode("ascii")).hexdigest()
+        with sessions.begin() as db:
+            account = verify(db, data.account_id, data.request_id, data.nonce, data.signature,
+                             body_hash, "/v1/l402/token")
+            deposit = db.execute(select(Deposit).where(Deposit.payment_hash == data.payment_hash)).scalar_one_or_none()
+            if deposit is None:
+                raise HTTPException(404, "Fatura/depósito não encontrado")
+            
+            status = invoice_port.status(data.payment_hash)
+            if not status.paid:
+                raise HTTPException(402, "Fatura Lightning ainda não liquidada")
+
+            if deposit.status == "pending":
+                db.execute(update(Deposit).where(Deposit.payment_hash == data.payment_hash,
+                                                 Deposit.status == "pending")
+                           .values(status="credited", credited_at=datetime.now(timezone.utc)))
+                db.execute(update(Account).where(Account.id == account.id)
+                           .values(balance=Account.balance + deposit.amount))
+                new_balance = db.execute(select(Account.balance).where(Account.id == account.id)).scalar_one()
+                db.add(Credit(payment_hash=deposit.payment_hash, account_id=account.id,
+                              request_id=deposit.request_id, amount=deposit.amount,
+                              balance_after=new_balance, created_at=datetime.now(timezone.utc)))
+
+        token = l402_mgr.create_token(data.account_id, data.payment_hash)
+        return {
+            "token": token,
+            "token_type": "L402",
+            "expires_in": 86400,
+            "account_id": data.account_id,
+            "payment_hash": data.payment_hash
+        }
+
+    @app.post("/v1/ai/infer")
+    def ai_infer(request: Request, data: AIInferInput):
+        """Endpoint protegido por Paywall L402 para Agentes Autônomos de IA."""
+        auth_header = request.headers.get("Authorization")
+        token, preimage = l402_mgr.parse_auth_header(auth_header)
+        
+        if token:
+            token_data = l402_mgr.verify_token(token)
+            if not token_data:
+                raise HTTPException(401, "Token L402 inválido ou expirado")
+            
+            if preimage:
+                if hashlib.sha256(bytes.fromhex(preimage)).hexdigest() != token_data.payment_hash:
+                    raise HTTPException(401, "Preimage não confere com o token L402")
+            
+            try:
+                usage = quote(data.prompt, billing_mode, price_sat)
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
+            
+            price = usage.price_sat
+            with sessions.begin() as db:
+                account = db.execute(select(Account).where(Account.id == token_data.account_id).with_for_update()).scalar_one_or_none()
+                if account is None:
+                    raise HTTPException(401, "Conta associada ao token não encontrada")
+                
+                changed = db.execute(update(Account).where(Account.id == account.id,
+                                                           Account.balance >= price)
+                                     .values(balance=Account.balance - price)).rowcount
+                if changed != 1:
+                    raise HTTPException(402, "Saldo pré-pago insuficiente; realize novo pagamento L402")
+                
+                balance = db.execute(select(Account.balance).where(Account.id == account.id)).scalar_one()
+                req_id = f"ai-{secrets.token_hex(8)}"
+                body_hash = hashlib.sha256(data.prompt.encode("utf-8")).hexdigest()
+                timestamp = datetime.now(timezone.utc)
+                db.add(Debit(account_id=account.id, request_id=req_id,
+                             body_hash=body_hash, amount=price, balance_after=balance,
+                             created_at=timestamp))
+                db.add(UsageEvent(account_id=account.id, request_id=req_id,
+                                  occurred_at=timestamp, billing_mode=usage.mode,
+                                  request_bytes=usage.request_bytes, response_bytes=usage.response_bytes,
+                                  input_tokens=usage.input_tokens, output_tokens=usage.output_tokens,
+                                  charged_sat=price))
+                
+                return {
+                    "model": data.model,
+                    "response": f"AI Completion: inference completed for prompt '{data.prompt}'. [L402 Authenticated & Settled]",
+                    "account_id": account.id,
+                    "payment_hash": token_data.payment_hash,
+                    "charged_sat": price,
+                    "balance_sat": balance,
+                    "replayed": False
+                }
+
+        account_id = data.account_id or request.headers.get("X-Account-Id") or "agent-demo"
+        public_key = data.public_key or request.headers.get("X-Public-Key")
+        
+        with sessions.begin() as db:
+            account = db.get(Account, account_id)
+            if account is None:
+                if not public_key:
+                    demo_key = Ed25519PrivateKey.generate()
+                    public_key = demo_key.public_key().public_bytes(
+                        serialization.Encoding.Raw, serialization.PublicFormat.Raw).hex()
+                db.add(Account(id=account_id, public_key=public_key, balance=0))
+                db.flush()
+            
+            request_id = f"l402-{secrets.token_hex(8)}"
+            if isinstance(invoice_port, FakeInvoices):
+                invoice = invoice_port.issue_bolt11(price_sat, f"L402 AI: {account_id}")
+            else:
+                invoice = invoice_port.issue(price_sat, f"L402 AI: {account_id}")
+            
+            db.add(Deposit(account_id=account_id, request_id=request_id,
+                           payment_hash=invoice.payment_hash, payment_request=invoice.payment_request,
+                           wallet_id=invoice.wallet_id, amount=price_sat, status="pending",
+                           created_at=datetime.now(timezone.utc)))
+            
+            body_hash = hashlib.sha256(invoice.payment_hash.encode("ascii")).hexdigest()
+            challenge = Challenge(nonce=secrets.token_hex(32), account_id=account_id,
+                                  request_id=request_id, body_hash=body_hash, path="/v1/l402/token",
+                                  expires_at=datetime.now(timezone.utc) + timedelta(seconds=120))
+            db.add(challenge)
+            db.flush()
+            
+            www_auth = l402_mgr.format_www_authenticate(
+                invoice.payment_request, challenge.nonce, account_id, invoice.payment_hash
+            )
+            
+            content = {
+                "detail": "Payment Required - L402 Challenge",
+                "invoice": invoice.payment_request,
+                "payment_hash": invoice.payment_hash,
+                "amount_sat": price_sat,
+                "account_id": account_id,
+                "request_id": request_id,
+                "challenge": {
+                    "nonce": challenge.nonce,
+                    "message": canonical(challenge).decode("ascii"),
+                    "expires_at": challenge.expires_at.isoformat()
+                }
+            }
+            return JSONResponse(status_code=402, content=content, headers={"WWW-Authenticate": www_auth})
 
     return app

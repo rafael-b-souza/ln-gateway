@@ -35,22 +35,66 @@ class InvoicePort(Protocol):
 
 
 class FakeInvoices:
-    """Provedor de faturas em memória para testes."""
+    """Provedor de faturas em memória para testes e demonstrações."""
 
     wallet_id = "fake-demo-wallet"
 
-    def __init__(self):
+    def __init__(self, use_bolt11: bool = False, network: str = "bcrt"):
         self.invoices: dict[str, bool] = {}
         self.amounts: dict[str, int] = {}
+        self.preimages: dict[str, str] = {}
+        self.use_bolt11 = use_bolt11
+        self.network = network
+
+    def encode_bolt11(self, amount_sat: int, payment_hash: str, memo: str = "l402-demo", network: str | None = None) -> str:
+        """Gera fatura BOLT11 assinada com secp256k1 para testes de L402."""
+        import time
+        from bolt11 import Bolt11, MilliSatoshi, Tags, TagChar, encode
+        net = network or self.network
+        obj = Bolt11(currency=net, amount_msat=MilliSatoshi(amount_sat * 1000),
+                     date=int(time.time()), tags=Tags())
+        obj.tags.add(TagChar.payment_hash, payment_hash)
+        obj.tags.add(TagChar.payment_secret, secrets.token_hex(32))
+        obj.tags.add(TagChar.description, memo[:60] if memo else "l402-demo")
+        obj.tags.add(TagChar.expire_time, 3600)
+        return encode(obj, private_key="1" * 64)
 
     def issue(self, amount_sat: int, memo: str) -> Invoice:
         """Emite fatura sintética para testes."""
+        import hashlib
         if not 1 <= amount_sat <= 1_000_000:
             raise ValueError("valor inválido")
-        token = secrets.token_hex(32)
-        self.invoices[token] = False
-        self.amounts[token] = amount_sat
-        return Invoice(token, "fake-invoice-" + token, amount_sat, self.wallet_id)
+        preimage = secrets.token_bytes(32)
+        payment_hash = hashlib.sha256(preimage).hexdigest()
+        self.invoices[payment_hash] = False
+        self.amounts[payment_hash] = amount_sat
+        self.preimages[payment_hash] = preimage.hex()
+        
+        if self.use_bolt11:
+            payment_request = self.encode_bolt11(amount_sat, payment_hash, memo)
+        else:
+            payment_request = "fake-invoice-" + payment_hash
+        return Invoice(payment_hash, payment_request, amount_sat, self.wallet_id)
+
+    def issue_bolt11(self, amount_sat: int, memo: str, network: str = "bcrt") -> Invoice:
+        """Emite fatura com codificação BOLT11 assinada."""
+        import hashlib
+        if not 1 <= amount_sat <= 1_000_000:
+            raise ValueError("valor inválido")
+        preimage = secrets.token_bytes(32)
+        payment_hash = hashlib.sha256(preimage).hexdigest()
+        self.invoices[payment_hash] = False
+        self.amounts[payment_hash] = amount_sat
+        self.preimages[payment_hash] = preimage.hex()
+        payment_request = self.encode_bolt11(amount_sat, payment_hash, memo, network=network)
+        return Invoice(payment_hash, payment_request, amount_sat, self.wallet_id)
+
+    def settle_invoice(self, payment_hash: str) -> str:
+        """Marca fatura como liquidada e retorna o preimage correspondente."""
+        if payment_hash not in self.amounts:
+            raise ValueError("invoice desconhecida")
+        self.invoices[payment_hash] = True
+        return self.preimages.get(payment_hash, "")
 
     def paid(self, payment_hash: str) -> bool:
         """Verifica se a fatura foi marcada como paga."""

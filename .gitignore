@@ -9,3 +9,4 @@ __pycache__/
 .env
 .postgres-data/
 .postgres-run/
+AGENTS.md

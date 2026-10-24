@@ -1,0 +1,40 @@
+version: "3.8"
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ln-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - GATEWAY_DATABASE_URL=sqlite:///./gateway.db
+      - GATEWAY_BILLING_MODE=request
+      - GATEWAY_UNIT_PRICE_SAT=1
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 5
+      start_period: 2s
+    networks:
+      - l402-network
+
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ln-agent-demo
+    depends_on:
+      gateway:
+        condition: service_healthy
+    command: ["python3", "scripts/demo_l402_agent.py", "--gateway-url", "http://gateway:8000"]
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - l402-network
+
+networks:
+  l402-network:
+    driver: bridge
