@@ -87,7 +87,7 @@ class AIInferInput(BaseModel):
 def canonical(challenge: Challenge) -> bytes:
     """Bytes canônicos para assinatura do desafio."""
     expiry = challenge.expires_at.replace(tzinfo=timezone.utc) if challenge.expires_at.tzinfo is None else challenge.expires_at
-    return (f"tcc-ln-gateway:v1\nPOST\n{challenge.path}\n{challenge.account_id}\n"
+    return (f"ln-gateway:v1\nPOST\n{challenge.path}\n{challenge.account_id}\n"
             f"{challenge.request_id}\n{challenge.nonce}\n{challenge.body_hash}\n"
             f"{expiry.isoformat()}\n").encode("ascii")
 

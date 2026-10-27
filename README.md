@@ -8,7 +8,7 @@
 
 **ln-gateway** é uma plataforma e gateway de alta performance que implementa a especificação **L402 (HTTP 402 Payment Required)** para habilitar a economia autônoma de Agentes de Inteligência Artificial (AI Agents) e a tarifação granular de APIs em tempo real através da **Bitcoin Lightning Network**.
 
-Desenvolvido originalmente como trabalho experimental de Engenharia de Software (TCC 2 — UTFPR Dois Vizinhos), o projeto resolve o gargalo de pagamentos máquina-para-máquina (M2M): agentes de software não possuem cartões de crédito ou contas bancárias legadas, mas conseguem transacionar microssatoshis instantaneamente via Lightning Network com liquidação criptográfica determinística.
+O projeto resolve o gargalo de pagamentos máquina-para-máquina (M2M): agentes de software não possuem cartões de crédito ou contas bancárias legadas, mas conseguem transacionar microssatoshis instantaneamente via Lightning Network com liquidação criptográfica determinística.
 
 ---
 
@@ -234,7 +234,7 @@ PYTHONPATH=src pytest -v
 
 # Executar suíte completa incluindo cluster PostgreSQL dedicado (80 testes)
 PGPASSFILE="$PWD/.postgres-run/pgpass" \
-TCC_TEST_DATABASE_URL='postgresql+psycopg://tcc_ln_gateway_test@127.0.0.1:55432/tcc_ln_gateway_test' \
+GATEWAY_TEST_DATABASE_URL='postgresql+psycopg://ln_gateway_test@127.0.0.1:55432/ln_gateway_test' \
 PYTHONPATH=src pytest -v
 ```
 
@@ -250,9 +250,6 @@ Este gateway atua como infraestrutura central de pagamento e custódia para apli
 
 ---
 
-## 📜 Licença e Contexto Acadêmico
+## 📜 Licença
 
-Projeto desenvolvido como parte do Trabalho de Conclusão de Curso 2 em Engenharia de Software na **Universidade Tecnológica Federal do Paraná (UTFPR) — Campus Dois Vizinhos**.
-- Autor: Rafael Bernardy de Souza
-- Documento original da proposta: `docs/TCC1-original.tex`
-- Licença: MIT
+Distribuído sob a licença MIT. Consulte `LICENSE` para mais detalhes.

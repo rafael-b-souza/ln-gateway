@@ -10,3 +10,21 @@ __pycache__/
 .postgres-data/
 .postgres-run/
 AGENTS.md
+
+# Documentação acadêmica e ensaios de laboratório (mantidos localmente)
+docs/TCC*
+docs/*TCC*
+docs/CONTEXTO-TCC.md
+docs/RESUMO-PROFESSORES.md
+docs/AUDITORIA-ESTILO-IA.md
+docs/ETAPA1.md
+docs/PRODUTO-ETAPA.md
+docs/VERIFICACAO-TCC2-2026-10-22.md
+docs/ALBY*
+docs/LNBITS*
+docs/EMISSAO*
+docs/ENSAIO*
+docs/CHECKLIST*
+docs/OUTBOX*
+docs/SANDBOX*
+scripts/reconcile_and_consume_live.py

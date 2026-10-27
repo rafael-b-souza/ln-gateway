@@ -18,9 +18,9 @@ from ln_gateway.storage import Account, Credit, Deposit, InvoiceAttempt, make_se
 def lab(request, tmp_path):
     import os
     if request.param == "pg":
-        url = os.getenv("TCC_TEST_DATABASE_URL")
+        url = os.getenv("GATEWAY_TEST_DATABASE_URL") or os.getenv("TCC_TEST_DATABASE_URL")
         if not url:
-            pytest.skip("cluster TCC não configurado")
+            pytest.skip("cluster PostgreSQL não configurado")
     else:
         url = f"sqlite:///{tmp_path / 'signed.db'}"
     sessions = make_sessions(url)

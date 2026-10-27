@@ -13,7 +13,7 @@ def database_engine(url: str):
     if url.startswith("postgresql+psycopg://"):
         parsed = make_url(url)
         if parsed.host != "127.0.0.1" or parsed.port != 55432 \
-                or parsed.database not in ("tcc_ln_gateway", "tcc_ln_gateway_test") \
+                or parsed.database not in ("ln_gateway", "ln_gateway_test", "tcc_ln_gateway", "tcc_ln_gateway_test") \
                 or parsed.username != parsed.database or parsed.password is not None:
             raise ValueError("PostgreSQL somente 127.0.0.1, porta local autorizada, papel/banco dedicados e senha fora da URL")
         return create_engine(url, connect_args={"connect_timeout": 10,

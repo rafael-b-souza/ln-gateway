@@ -15,9 +15,9 @@ def lab(request, tmp_path):
     """PG opt-in exige porta dedicada; isolamos cada teste por conta com ID próprio."""
     if request.param == "pg":
         import os
-        if not os.getenv("TCC_TEST_DATABASE_URL"):
-            pytest.skip("banco TCC exclusivo não configurado")
-        url = os.environ["TCC_TEST_DATABASE_URL"]
+        url = os.getenv("GATEWAY_TEST_DATABASE_URL") or os.getenv("TCC_TEST_DATABASE_URL")
+        if not url:
+            pytest.skip("banco PostgreSQL exclusivo não configurado")
     else:
         url = f"sqlite:///{tmp_path / 'issuing.db'}"
     import secrets

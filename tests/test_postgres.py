@@ -24,14 +24,14 @@ def anyio_backend():
 
 @pytest.fixture
 def pg_lab():
-    raw = os.getenv("TCC_TEST_DATABASE_URL")
+    raw = os.getenv("GATEWAY_TEST_DATABASE_URL") or os.getenv("TCC_TEST_DATABASE_URL")
     if not raw:
-        pytest.skip("TCC_TEST_DATABASE_URL não definido; banco exclusivo não provisionado")
+        pytest.skip("GATEWAY_TEST_DATABASE_URL/TCC_TEST_DATABASE_URL não definido; banco exclusivo não provisionado")
     url = make_url(raw)
     if (url.drivername != "postgresql+psycopg" or url.host != "127.0.0.1"
-            or url.port != 55432 or url.database != "tcc_ln_gateway_test"
-            or url.username != "tcc_ln_gateway_test" or url.password is not None):
-        pytest.fail("Teste PostgreSQL exige somente usuário/banco tcc_ln_gateway_test em 127.0.0.1")
+            or url.port != 55432 or url.database not in ("ln_gateway_test", "tcc_ln_gateway_test")
+            or url.username != url.database or url.password is not None):
+        pytest.fail("Teste PostgreSQL exige somente usuário/banco dedicado em 127.0.0.1")
     fake = FakeInvoices()
     app = create_app(raw, price_sat=2, invoices=fake)
     account_id = "test_" + secrets.token_hex(12)
@@ -81,7 +81,8 @@ async def test_pg_parallel_credit_after_restart_and_retry(pg_lab):
     assert first.status_code == 201
     h = first.json()["payment_hash"]
     fake.invoices[h] = True
-    other = create_app(os.environ["TCC_TEST_DATABASE_URL"], invoices=fake)
+    db_url = os.environ.get("GATEWAY_TEST_DATABASE_URL") or os.environ["TCC_TEST_DATABASE_URL"]
+    other = create_app(db_url, invoices=fake)
     attempts = []
     for _ in range(6):
         attempts.append(await proof(app, key, "pgdeposit", "", aid, "/v1/deposits/reconcile"))
@@ -90,7 +91,7 @@ async def test_pg_parallel_credit_after_restart_and_retry(pg_lab):
     assert all(r.status_code == 200 for r in results)
     assert sum(r.json()["credited"] is True for r in results) == 1
     # Após reinício do fake, o lançamento persistido ainda permite responder ao retry.
-    fresh = create_app(os.environ["TCC_TEST_DATABASE_URL"])
+    fresh = create_app(db_url)
     retry = await proof(fresh, key, "pgdeposit", "", aid, "/v1/deposits/reconcile")
     assert (await post(fresh, "/v1/deposits/reconcile", retry)).json()["credited"] is False
     with app.state.sessions() as db:

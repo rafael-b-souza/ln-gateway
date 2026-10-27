@@ -13,13 +13,15 @@ from ln_gateway.storage import make_sessions
 
 def test_pg_v4_idempotent_and_rollback():
     """Valida idempotência das migrações e atomicidade em falha de transação."""
-    url = os.getenv("TCC_TEST_DATABASE_URL")
+    url = os.getenv("GATEWAY_TEST_DATABASE_URL") or os.getenv("TCC_TEST_DATABASE_URL")
     if not url:
         pytest.skip("cluster exclusivo não configurado")
     parsed = make_url(url)
-    assert (parsed.drivername, parsed.host, parsed.port, parsed.database, parsed.username,
-            parsed.password) == ("postgresql+psycopg", "127.0.0.1", 55432,
-                                 "tcc_ln_gateway_test", "tcc_ln_gateway_test", None)
+    assert (parsed.drivername, parsed.host, parsed.port, parsed.password) == (
+        "postgresql+psycopg", "127.0.0.1", 55432, None
+    )
+    assert parsed.database in ("ln_gateway_test", "tcc_ln_gateway_test")
+    assert parsed.username == parsed.database
     sessions = make_sessions(url)
     engine = sessions.kw["bind"]
     account = "rollback_" + secrets.token_hex(8)
